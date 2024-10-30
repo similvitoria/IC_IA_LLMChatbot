@@ -1,2 +1,0 @@
-pip install ollama langchain
-pip install python-dotenv
