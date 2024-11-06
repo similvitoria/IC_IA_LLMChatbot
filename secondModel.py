@@ -1,158 +1,250 @@
-import subprocess
-import threading
-import time
-from dataclasses import dataclass, field
+import re
+import json
+from dataclasses import dataclass, asdict
 from typing import List, Optional
+import openai
+from config import OPENAI_API_KEY
+
+openai.api_key = OPENAI_API_KEY
 
 @dataclass
-class Education:
-    institution: str
-    course: str
-    period: str
-    status: str = "Em andamento"
-
-@dataclass
-class Experience:
-    company: str
-    role: str
-    period: str
-    description: str
+class ProfessionalExperience:
+    cargo: str
+    responsabilidades: str
+    habilidades: List[str]
+    resultados: str
 
 @dataclass
 class Candidate:
-    email: str
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    educations: List[Education] = field(default_factory=list)
-    experiences: List[Experience] = field(default_factory=list)
+    email: Optional[str] = None
+    nome_completo: Optional[str] = None
+    idade: Optional[int] = None
+    telefone: Optional[str] = None
+    experiencias: List[ProfessionalExperience] = None
 
-class LLMRecruitmentChatbot:
+    def is_complete(self) -> bool:
+        return all([
+            self.email, self.nome_completo, self.idade,
+            self.telefone, self.experiencias
+        ])
+
+class ValidationError(Exception):
+    pass
+
+class RecruitmentChatbot:
     def __init__(self):
-        self.candidates = {}
-        self.current_candidate = None
-        self.state = "INITIAL"
-        self.conversation_history = []
-        self.TIMEOUT = 15  # timeout em segundos
+        self.candidate = Candidate()
+        self.current_field = "email"
+        
+    def validate_email(self, email: str) -> bool:
+        pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+        if not re.match(pattern, email):
+            raise ValidationError("Email inválido. Por favor, forneça um email válido (ex: seu.nome@email.com)")
+        return True
 
-    def run_command_with_timeout(self, command):
-        """Executa um comando com timeout"""
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+    def validate_nome(self, nome: str) -> bool:
+        if len(nome.split()) < 2:
+            raise ValidationError("Por favor, forneça seu nome completo com pelo menos nome e sobrenome")
+        return True
+
+    def validate_idade(self, idade: str) -> bool:
+        try:
+            idade_int = int(idade)
+            if not (0 <= idade_int <= 120):
+                raise ValidationError("A idade deve estar entre 0 e 120 anos")
+            return True
+        except ValueError:
+            raise ValidationError("Por favor, forneça apenas números para a idade")
+
+    def validate_telefone(self, telefone: str) -> bool:
+        numeros = ''.join(filter(str.isdigit, telefone))
+        if len(numeros) < 10 or len(numeros) > 11:
+            raise ValidationError("O telefone deve conter entre 10 e 11 dígitos (DDD + número)")
+        return True
+
+    def get_next_prompt(self) -> str:
+        if not self.candidate.email:
+            return "Por favor, forneça seu email:"
+        elif not self.candidate.nome_completo:
+            return "Qual é seu nome completo?"
+        elif not self.candidate.idade:
+            return "Qual é sua idade?"
+        elif not self.candidate.telefone:
+            return "Qual é seu número de telefone?"
+        elif not self.candidate.experiencias:
+            return """
+Me conte sobre sua experiência profissional mais recente:
+- Cargo
+- Principais responsabilidades
+- Habilidades utilizadas
+- Resultados alcançados
+"""
+        return "Todas as informações foram coletadas! Deseja adicionar mais uma experiência profissional? (sim/não)"
+
+    def parse_experience(self, experience_text: str) -> ProfessionalExperience:
+        prompt = f"""
+        Analise a seguinte experiência profissional e extraia as informações no formato JSON:
+        
+        {experience_text}
+        
+        Retorne um JSON válido com exatamente esta estrutura:
+        {{
+            "cargo": "cargo da pessoa",
+            "responsabilidades": "principais responsabilidades",
+            "habilidades": ["habilidade1", "habilidade2"],
+            "resultados": "resultados alcançados"
+        }}
+        """
         
         try:
-            stdout, stderr = process.communicate(timeout=self.TIMEOUT)
-            if process.returncode == 0:
-                return stdout.strip()
-            return f"Erro: {stderr.strip()}"
-        except subprocess.TimeoutExpired:
-            process.kill()
-            return "Tempo de resposta excedido. Usando resposta padrão."
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{
+                    "role": "system",
+                    "content": "Você deve retornar apenas o JSON válido, sem nenhum texto adicional."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }]
+            )
+            
+            # Extrair e validar o JSON da resposta
+            json_str = response.choices[0].message['content'].strip()
+            # Remover possíveis markdown code blocks
+            json_str = json_str.replace('```json', '').replace('```', '').strip()
+            
+            # Parse do JSON
+            experience_data = json.loads(json_str)
+            
+            # Criar objeto ProfessionalExperience
+            return ProfessionalExperience(
+                cargo=experience_data['cargo'],
+                responsabilidades=experience_data['responsabilidades'],
+                habilidades=experience_data['habilidades'],
+                resultados=experience_data['resultados']
+            )
+            
+        except json.JSONDecodeError as e:
+            raise ValidationError(f"Erro ao processar experiência profissional. Por favor, tente novamente com mais detalhes.")
+        except KeyError as e:
+            raise ValidationError(f"Dados incompletos na experiência profissional. Certifique-se de incluir todas as informações solicitadas.")
         except Exception as e:
-            return f"Erro: {str(e)}"
+            raise ValidationError(f"Erro ao processar experiência: {str(e)}")
 
-    def get_llm_response(self, prompt):
-        # Prompt simplificado para melhor performance
-        system_prompt = (
-            "Você é um assistente de recrutamento. "
-            "Estado atual: " + self.state + ". "
-            "Última mensagem do usuário: " + prompt
-        )
-        
-        # Se não houver resposta do modelo em tempo hábil, use respostas padrão
+    def process_input(self, user_input: str) -> str:
         try:
-            command = ["ollama", "run", "llama2", system_prompt]
-            response = self.run_command_with_timeout(command)
+            if not self.candidate.email:
+                if self.validate_email(user_input):
+                    self.candidate.email = user_input
+                    return f"Email registrado: {user_input}\n\n{self.get_next_prompt()}"
+                
+            elif not self.candidate.nome_completo:
+                if self.validate_nome(user_input):
+                    self.candidate.nome_completo = user_input
+                    return f"Nome registrado: {user_input}\n\n{self.get_next_prompt()}"
+                
+            elif not self.candidate.idade:
+                if self.validate_idade(user_input):
+                    self.candidate.idade = int(user_input)
+                    return f"Idade registrada: {user_input}\n\n{self.get_next_prompt()}"
+                
+            elif not self.candidate.telefone:
+                if self.validate_telefone(user_input):
+                    self.candidate.telefone = user_input
+                    return f"Telefone registrado: {user_input}\n\n{self.get_next_prompt()}"
+                
+            elif not self.candidate.experiencias:
+                self.candidate.experiencias = []
+                experience = self.parse_experience(user_input)
+                self.candidate.experiencias.append(experience)
+                
+                return f"""
+Experiência registrada com sucesso!
+
+Cargo: {experience.cargo}
+Responsabilidades: {experience.responsabilidades}
+Habilidades: {', '.join(experience.habilidades)}
+Resultados: {experience.resultados}
+
+Deseja adicionar mais uma experiência profissional? (sim/não)
+"""
             
-            # Se houver timeout ou erro, use respostas padrão baseadas no estado
-            if "Tempo de resposta excedido" in response or "Erro" in response:
-                return self.get_default_response()
-            
-            return response
+            else:
+                if user_input.lower() == 'sim':
+                    experience = self.parse_experience(user_input)
+                    self.candidate.experiencias.append(experience)
+                    return """
+Me conte sobre sua próxima experiência profissional:
+- Cargo
+- Principais responsabilidades
+- Habilidades utilizadas
+- Resultados alcançados
+"""
+                elif user_input.lower() == 'não':
+                    return self.finalize_registration()
+                else:
+                    experience = self.parse_experience(user_input)
+                    self.candidate.experiencias.append(experience)
+                    return f"""
+Experiência registrada com sucesso!
+
+Cargo: {experience.cargo}
+Responsabilidades: {experience.responsabilidades}
+Habilidades: {', '.join(experience.habilidades)}
+Resultados: {experience.resultados}
+
+Deseja adicionar mais uma experiência profissional? (sim/não)
+"""
+                
+        except ValidationError as e:
+            return f"{str(e)}\n\n{self.get_next_prompt()}"
+        
         except Exception as e:
-            return self.get_default_response()
+            return f"Ocorreu um erro: {str(e)}\n\nPor favor, tente novamente."
 
-    def get_default_response(self):
-        """Retorna respostas padrão baseadas no estado atual"""
-        responses = {
-            "INITIAL": "Bem-vindo! Por favor, informe seu nome completo:",
-            "WAITING_NAME": "Qual é seu telefone para contato?",
-            "WAITING_PHONE": "Qual é sua formação acadêmica? (Formato: Instituição - Curso - Período)",
-            "WAITING_EDUCATION": "Educação registrada. Você possui experiência profissional? (Sim/Não)",
-            "WAITING_EXPERIENCE": "Por favor, informe sua experiência: Empresa - Cargo - Período - Descrição",
-            "WAITING_MORE_EXPERIENCE": "Deseja adicionar mais uma experiência? (Sim/Não)",
-            "SHOWING_RESUME": "Deseja ver vagas disponíveis? (Sim/Não)"
-        }
-        return responses.get(self.state, "Como posso ajudar?")
+    def finalize_registration(self) -> str:
+        # Aqui você pode adicionar a lógica para conectar com o módulo de candidatura
+        # e sugerir vagas baseadas no perfil
+        return f"""
+Cadastro finalizado com sucesso!
 
-    def process_input(self, user_input):
-        """Processa a entrada do usuário e atualiza o estado"""
-        if self.state == "INITIAL":
-            email = user_input.lower().strip()
-            if '@' in email:
-                if email not in self.candidates:
-                    self.candidates[email] = Candidate(email=email)
-                self.current_candidate = self.candidates[email]
-                self.state = "WAITING_NAME"
-                return "Bem-vindo! Por favor, informe seu nome completo:"
-            return "Por favor, forneça um email válido."
+Resumo das informações:
+- Email: {self.candidate.email}
+- Nome: {self.candidate.nome_completo}
+- Idade: {self.candidate.idade}
+- Telefone: {self.candidate.telefone}
+- Número de experiências: {len(self.candidate.experiencias)}
 
-        elif self.state == "WAITING_NAME":
-            self.current_candidate.name = user_input
-            self.state = "WAITING_PHONE"
-            return "Qual é seu telefone para contato?"
+Experiências profissionais:
+{''.join([f'''
+Experiência {i+1}:
+- Cargo: {exp.cargo}
+- Responsabilidades: {exp.responsabilidades}
+- Habilidades: {', '.join(exp.habilidades)}
+- Resultados: {exp.resultados}
+''' for i, exp in enumerate(self.candidate.experiencias)])}
 
-        elif self.state == "WAITING_PHONE":
-            self.current_candidate.phone = user_input
-            self.state = "WAITING_EDUCATION"
-            return "Qual é sua formação acadêmica? (Formato: Instituição - Curso - Período)"
-
-        elif self.state == "WAITING_EDUCATION":
-            try:
-                parts = user_input.split('-')
-                if len(parts) >= 3:
-                    education = Education(
-                        institution=parts[0].strip(),
-                        course=parts[1].strip(),
-                        period=parts[2].strip()
-                    )
-                    self.current_candidate.educations.append(education)
-                    self.state = "WAITING_HAS_EXPERIENCE"
-                    return "Educação registrada. Você possui experiência profissional? (Sim/Não)"
-                return "Por favor, use o formato: Instituição - Curso - Período"
-            except:
-                return "Formato inválido. Use: Instituição - Curso - Período"
-
-        return self.get_default_response()
-
-    def get_response(self, user_input):
-        """Método principal para processar entrada e retornar resposta"""
-        # Primeiro tenta processar com lógica básica
-        response = self.process_input(user_input)
-        
-        # Se não houver resposta da lógica básica, tenta usar o modelo
-        if not response:
-            response = self.get_llm_response(user_input)
-        
-        return response
+Baseado no seu perfil, vou buscar vagas compatíveis...
+[Aqui você pode adicionar a lógica de matching com vagas disponíveis]
+"""
 
 def main():
-    print("=== Sistema de Recrutamento com IA ===")
-    print("Assistente: Olá! Sou seu assistente de recrutamento. Por favor, me informe seu email para começarmos:")
-    
-    chatbot = LLMRecruitmentChatbot()
+    chatbot = RecruitmentChatbot()
+    print("Bem-vindo ao nosso processo seletivo!")
+    print(chatbot.get_next_prompt())
     
     while True:
-        user_input = input("\nVocê: ")
-        if user_input.lower() in ['sair', 'exit']:
-            print("Assistente: Até logo!")
+        user_input = input("Você: ")
+        if user_input.lower() == 'sair':
+            print("Chatbot: Até logo!")
             break
             
-        response = chatbot.get_response(user_input)
-        print(f"\nAssistente: {response}")
+        response = chatbot.process_input(user_input)
+        print(f"Chatbot: {response}")
+        
+        if "Cadastro finalizado com sucesso!" in response:
+            break
 
 if __name__ == "__main__":
     main()
