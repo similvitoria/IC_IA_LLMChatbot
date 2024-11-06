@@ -1,0 +1,13 @@
+2024-11-05 21:16:30,576 - INFO - message='OpenAI API response' path=https://api.openai.com/v1/chat/completions processing_ms=7586 request_id=req_0db91bebd8c3480b06e4563f13ac9ad1 response_code=200
+2024-11-05 21:19:20,985 - ERROR - Main loop error: 
+2024-11-05 21:19:25,840 - INFO - message='OpenAI API response' path=https://api.openai.com/v1/chat/completions processing_ms=760 request_id=req_1213abf96eebb2e65f195b9e82f97c9f response_code=200
+2024-11-05 21:19:43,712 - INFO - message='OpenAI API response' path=https://api.openai.com/v1/chat/completions processing_ms=2461 request_id=req_00d23122da01c4777f6f0d1f4526d32b response_code=200
+2024-11-05 21:19:55,863 - INFO - message='OpenAI API response' path=https://api.openai.com/v1/chat/completions processing_ms=2041 request_id=req_41ba3a56064c5f6ca09e7753daa00116 response_code=200
+2024-11-05 21:22:55,603 - ERROR - Main loop error: 
+2024-11-05 21:23:25,547 - INFO - message='OpenAI API response' path=https://api.openai.com/v1/chat/completions processing_ms=514 request_id=req_d0406cf574ac53ca8ef0b1d18bddf16a response_code=200
+2024-11-05 21:23:34,904 - INFO - message='OpenAI API response' path=https://api.openai.com/v1/chat/completions processing_ms=2115 request_id=req_b4a3365ef50ae524fd1f944976dff2b9 response_code=200
+2024-11-05 21:23:46,586 - INFO - message='OpenAI API response' path=https://api.openai.com/v1/chat/completions processing_ms=2109 request_id=req_48a122ce961f4578da1b5d1d40c79f21 response_code=200
+2024-11-05 21:25:38,404 - ERROR - Main loop error: 
+2024-11-05 21:25:40,942 - ERROR - GPT API error: 'GPTAgent' object has no attribute '_create_system_prompt'
+2024-11-05 21:25:40,943 - ERROR - Error processing user input: 'GPTAgent' object has no attribute '_create_system_prompt'
+2024-11-05 21:27:03,009 - ERROR - Main loop error: 
