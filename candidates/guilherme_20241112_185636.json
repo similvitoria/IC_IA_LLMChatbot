@@ -1,0 +1,20 @@
+{
+  "email": "guilherme@gmail.com",
+  "nome_completo": "Guilherme Otávio de OLiveira",
+  "idade": 19,
+  "telefone": "6855566611",
+  "experiencias": [
+    {
+      "cargo": "Desenvolvedor Back-end",
+      "responsabilidades": "Desenvolver e manter APIs RESTful usando Python e Django, integrar bancos de dados (PostgreSQL/MySQL), otimizar performance de sistemas internos, implementar autenticação segura com JWT e melhorar a escalabilidade do sistema através de técnicas de balanceamento de carga e escalabilidade horizontal.",
+      "habilidades": [
+        "Python",
+        "Django",
+        "SQL",
+        "Git",
+        "APIs RESTful"
+      ],
+      "resultados": "Redução de tempo de resposta em 30% através da otimização de consultas e uso de cache; Melhoria da escalabilidade do sistema em 50%"
+    }
+  ]
+}
