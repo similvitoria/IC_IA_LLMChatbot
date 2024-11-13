@@ -1,0 +1,17 @@
+{
+  "email": "guilhermeotavio@gmail.com",
+  "nome_completo": "Guilherme Otávio de Oliveira",
+  "data_nascimento": "30/01/2004",
+  "telefone": "3522201141",
+  "experiencias": [
+    {
+      "cargo": "Agente de IA",
+      "responsabilidades": "Fornecer soluções técnicas avançadas, apoiar no desenvolvimento de código em diversas linguagens, criar sistemas personalizados e interativos, e integrar algoritmos de aprendizado de máquina e processamento de linguagem natural para otimizar processos e melhorar a experiência do usuário.",
+      "habilidades": [
+        "Desenvolvimento de código em diversas linguagens",
+        "Integração de algoritmos de aprendizado de máquina e processamento de linguagem natural"
+      ],
+      "resultados": "Otimização de processos e melhoria da experiência do usuário"
+    }
+  ]
+}
