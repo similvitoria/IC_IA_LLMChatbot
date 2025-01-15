@@ -136,7 +136,7 @@ class WhatsAppRecruitmentBot:
                 })
         except (FileNotFoundError, json.JSONDecodeError):
             return {
-                'current_step': 'email',
+                'current_step': 'apresentar',
                 'candidate_data': {}
             }
 
@@ -255,6 +255,7 @@ Se não conseguir extrair todas as informações, use valores padrão razoáveis
         state = self._load_state(phone_number)
         candidate_data = state.get('candidate_data', {})
         current_step = state.get('current_step', 'email')
+        print(state, candidate_data, current_step)
 
         # Normalize message input
         message = message.strip()
@@ -271,9 +272,18 @@ Se não conseguir extrair todas as informações, use valores padrão razoáveis
                     'reply': "Processo de cadastro reiniciado. Por favor, forneça seu email.",
                     'continue_flow': True
                 }
-
+            if current_step == 'apresentar':
+                state = {
+                    'current_step': 'email',
+                    'candidate_data': {}
+                }
+                self._save_state(phone_number, state)
+                return {
+                    'reply': "Olá! 👋 Seja bem-vindo(a) . Estou aqui para ajudar você a encontrar a oportunidade certa! 😊 Para começar, me informe seu e-mail.",
+                    'continue_flow': True
+                }  
             # Validation and progression logic based on current step
-            if current_step == 'email':
+            elif current_step == 'email':
                 if not self._validate_email(message):
                     return {
                         'reply': "Email inválido. Por favor, forneça um email válido (ex: seu.nome@email.com)",
@@ -310,21 +320,6 @@ Se não conseguir extrair todas as informações, use valores padrão razoáveis
                         'continue_flow': True
                     }
                 candidate_data['data_nascimento'] = message
-                state['current_step'] = 'telefone'
-                state['candidate_data'] = candidate_data
-                self._save_state(phone_number, state)
-                return {
-                    'reply': "Qual é seu número de telefone?",
-                    'continue_flow': True
-                }
-
-            elif current_step == 'telefone':
-                if not self._validate_telefone(message):
-                    return {
-                        'reply': "O telefone deve conter entre 10 e 11 dígitos (DDD + número)",
-                        'continue_flow': True
-                    }
-                candidate_data['telefone'] = message
                 state['current_step'] = 'experiencia'
                 state['candidate_data'] = candidate_data
                 self._save_state(phone_number, state)
